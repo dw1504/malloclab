@@ -1,0 +1,234 @@
+/*
+ * mm-naive.c - The fastest, least memory-efficient malloc package.
+ * 
+ * In this naive approach, a block is allocated by simply incrementing
+ * the brk pointer.  A block is pure payload. There are no headers or
+ * footers.  Blocks are never coalesced or reused. Realloc is
+ * implemented directly using mm_malloc and mm_free.
+ *
+ * NOTE TO STUDENTS: Replace this header comment with your own header
+ * comment that gives a high level description of your solution.
+ */
+#include <stdio.h>
+#include <stdlib.h>
+#include <assert.h>
+#include <unistd.h>
+#include <string.h>
+
+#include "mm.h"
+#include "memlib.h"
+
+#define HEAP_SIZE 1000000  //mem_heapsize()
+
+
+/*********************************************************
+ * NOTE TO STUDENTS: Before you do anything else, please
+ * provide your team information in the following struct.
+ ********************************************************/
+team_t team = {
+    /* Team name */
+    "csoteam",
+    /* First member's full name */
+    "Jinyang Li",
+    /* First member's email address */
+    "jl123@nyu.edu",
+    /* Second member's full name (leave blank if none) */
+    "",
+    /* Second member's email address (leave blank if none) */
+    ""
+};
+
+//free is 1, allocate is 0
+
+typedef struct node{
+	struct node *next;
+	struct node *prev;
+	size_t sz;
+	char free;
+}header;
+
+
+
+//header *hp_head;
+header *f_head;
+
+header* search(size_t size){
+	//size_t required = ALIGN(size + sizeof(header)+ SIZE_T_SIZE);//check align 
+	//size_t required = size + sizeof(header);
+	while (f_head != NULL){
+	// 	printf("working1");
+		if(f_head->sz >= size){
+	//		 printf("working2");
+			return f_head; //+ SIZE_T_SIZE;
+			//return f_head;
+		}
+		f_head = f_head->next;
+	//	printf("working3");
+	}	
+	return NULL;
+}
+
+header *split(size_t size, header* head){
+	//size_t block = ALIGN(size + sizeof(header)+ SIZE_T_SIZE);
+	//size_t block = size + sizeof(header);
+	size_t remainder = head->sz - size;
+	header *rem = head + size;
+	rem->sz = remainder;
+	rem->free = 1;
+	rem->next = f_head;
+	f_head = rem;
+	return rem;// + SIZE_T_SIZE;
+	//return rem;
+}
+
+/* 
+ * mm_init - initialize the malloc package.
+ */
+int mm_init(void)
+{
+	header * hp_head = (header*) mem_heap_lo();
+//	f_head = (header *) mem_heap_lo();
+	hp_head->sz = HEAP_SIZE;
+	//hp_head->sz = HEAP_SIZE;
+	hp_head->free = 1;	
+	hp_head->prev = NULL;
+	hp_head->next = NULL;
+	f_head = hp_head;
+	//printf("HEAP_SIZE: %d", HEAP_SIZE);
+	//printf("hp_head size: %lu", hp_head->sz);
+	//printf("f_head size: %lu", f_head->sz);
+	return 0;
+}
+
+/* 
+ * mm_malloc - Allocate a block by incrementing the brk pointer.
+ *     Always allocate a block whose size is a multiple of the alignment.
+ */
+void *mm_malloc(size_t size)
+{
+	
+	//printf("size is %lu", size);
+	int newsize = ALIGN(size + sizeof(header) + SIZE_T_SIZE);
+	//printf("    newsize is %d    ", newsize);
+    	//void *p = mem_sbrk(newsize);
+	//mem_sbrk(ALIGN(size+sizeof(header)+ SIZE_T_SIZE));
+	//mem_sbrk(size+sizeof(header));
+	header *loc = search(newsize);
+	//printf("  loc is of size %lu   ", loc->sz);
+	if (loc != NULL){
+		loc = mem_sbrk(newsize);
+		loc->free = 0;
+		size_t rem = loc->sz - newsize;
+		//size_t rem = loc->sz - (size + sizeof(header));
+		if (rem > ALIGN(sizeof(header) + SIZE_T_SIZE)){
+			split(newsize, loc);
+		}
+		loc->prev = loc->next;
+		return (void*)(char*)loc; //+ SIZE_T_SIZE);
+	}
+	return NULL;
+	//return (char*)loc; 
+	/*
+    int newsize = ALIGN(size + SIZE_T_SIZE);
+    void *p = mem_sbrk(newsize);
+    if (p == (void *)-1)
+	return NULL;
+    else {
+        *(size_t *)p = size;
+        return (void *)((char *)p + SIZE_T_SIZE);
+    }
+	*/
+
+}
+
+void detach(header *ptr){
+	ptr->prev->next = ptr->next;
+}
+
+void merge(header *left, header *right){
+	left->sz = (left->sz) + right->sz;
+	left->free = 1;
+}
+
+void insert(header *ptr){
+	ptr->next = f_head;
+        f_head = ptr;
+
+}
+
+/*
+ * mm_free - Freeing a block does nothing.
+ */
+void mm_free(void *ptr)
+{
+
+	header *p = (header *)ptr;
+	printf("p_value %lu", p->sz);
+	size_t distance =  p->sz;
+	printf("value: %lu\n", distance);
+
+	if ((p+distance)->free == 1){
+		printf("one\n");
+		detach(p + distance);
+		printf("two\n");
+		merge(p, p + distance);
+		printf("three\n");
+		insert(p);
+		printf("four\n");
+	}
+
+#if 0 
+	if ((ptr+(ptr->sz))->free == 1){
+                printf("one\n");
+                detach(ptr + (ptr->sz));
+                printf("two\n");
+                merge(ptr, ptr + (ptr->sz));
+                printf("three\n");
+                insert(ptr);
+                printf("four\n");
+        }
+#endif
+	/*
+	if(ptr->next->free == 1){
+		detach();
+		merge();
+	}
+	*/
+
+}
+
+/*
+ * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
+ */
+void *mm_realloc(void *ptr, size_t size)
+{
+    void *oldptr = ptr;
+    void *newptr;
+    size_t copySize;
+    
+    newptr = mm_malloc(size);
+    if (newptr == NULL)
+      return NULL;
+    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    if (size < copySize)
+      copySize = size;
+    memcpy(newptr, oldptr, copySize);
+    mm_free(oldptr);
+    return newptr;
+}
+
+
+void mm_checkheap(int verbose) 
+{
+	return;
+}
+
+
+
+
+
+
+
+
+
+
